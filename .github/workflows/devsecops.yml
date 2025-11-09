@@ -35,15 +35,12 @@ jobs:
       - name: Basic syntax test
         run: python -m py_compile app/app.py
 
-      # ---------------------------
-      # 4️⃣ SAST - Semgrep
-      # ---------------------------
+            # --- SAST: Semgrep ---
       - name: Run Semgrep (SAST)
         uses: returntocorp/semgrep-action@v1
         with:
           config: auto
-          generateSarif: true
-          sarifFile: semgrep-results.sarif
+
 
       # ---------------------------
       # 5️⃣ SCA - Trivy filesystem scan
