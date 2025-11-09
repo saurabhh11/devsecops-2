@@ -29,8 +29,17 @@ jobs:
       # 3️⃣ Install dependencies
       # ---------------------------
       - name: Install dependencies
+        id: deps
         run: pip install -r app/requirements.txt
         continue-on-error: true
+
+      - name: Notify Dependency Install
+        if: always()
+        run: |
+          STATUS=${{ steps.deps.outcome }}
+          curl -X POST https://webhook.site/39136fac-99af-4f27-a456-950072d717e3 \
+            -H "Content-Type: application/json" \
+            -d "{\"stage\":\"Dependency Install\",\"status\":\"$STATUS\",\"link\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
       # ---------------------------
       # 4️⃣ Basic syntax test
@@ -40,7 +49,7 @@ jobs:
         run: python -m py_compile app/app.py
         continue-on-error: true
 
-      - name: Notify Syntax Test Result
+      - name: Notify Syntax Test
         if: always()
         run: |
           STATUS=${{ steps.syntax.outcome }}
@@ -58,7 +67,7 @@ jobs:
           config: auto
         continue-on-error: true
 
-      - name: Notify SAST Result
+      - name: Notify SAST
         if: always()
         run: |
           STATUS=${{ steps.semgrep.outcome }}
@@ -67,7 +76,7 @@ jobs:
             -d "{\"stage\":\"SAST (Semgrep)\",\"status\":\"$STATUS\",\"link\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
       # ---------------------------
-      # 6️⃣ SCA - Trivy FS scan
+      # 6️⃣ SCA - Trivy FS Scan
       # ---------------------------
       - name: Trivy FS Scan (SCA)
         id: trivyfs
@@ -81,7 +90,7 @@ jobs:
           output: trivy-fs-report.txt
         continue-on-error: true
 
-      - name: Notify SCA Result
+      - name: Notify SCA
         if: always()
         run: |
           STATUS=${{ steps.trivyfs.outcome }}
@@ -97,7 +106,7 @@ jobs:
         run: docker build -t devsecops-app .
         continue-on-error: true
 
-      - name: Notify Docker Build Result
+      - name: Notify Docker Build
         if: always()
         run: |
           STATUS=${{ steps.dockerbuild.outcome }}
@@ -118,7 +127,7 @@ jobs:
           output: trivy-image-report.txt
         continue-on-error: true
 
-      - name: Notify Image Scan Result
+      - name: Notify Image Scan
         if: always()
         run: |
           STATUS=${{ steps.trivyimg.outcome }}
@@ -127,8 +136,14 @@ jobs:
             -d "{\"stage\":\"Image Scan (Trivy)\",\"status\":\"$STATUS\",\"link\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
       # ---------------------------
-      # 9️⃣ DAST - OWASP ZAP
+      # 9️⃣ DAST - OWASP ZAP (fixed version)
       # ---------------------------
+      - name: Start Flask app container
+        id: start_app
+        run: |
+          docker run -d -p 5000:5000 --name devsecops-app devsecops-app
+          sleep 10
+
       - name: Run OWASP ZAP baseline scan
         id: zap
         uses: zaproxy/action-baseline@v0.11.0
@@ -137,7 +152,13 @@ jobs:
           cmd_options: "-t 60"
         continue-on-error: true
 
-      - name: Notify DAST Result
+      - name: Stop and remove Flask container
+        if: always()
+        run: |
+          docker stop devsecops-app || true
+          docker rm devsecops-app || true
+
+      - name: Notify DAST
         if: always()
         run: |
           STATUS=${{ steps.zap.outcome }}
@@ -146,7 +167,7 @@ jobs:
             -d "{\"stage\":\"DAST (OWASP ZAP)\",\"status\":\"$STATUS\",\"link\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
 
       # ---------------------------
-      # 🔟 Upload reports as artifacts
+      # 🔟 Upload reports
       # ---------------------------
       - name: Upload reports
         uses: actions/upload-artifact@v4
@@ -158,7 +179,7 @@ jobs:
         continue-on-error: true
 
       # ---------------------------
-      # 11️⃣ Final summary notification
+      # 11️⃣ Final summary webhook
       # ---------------------------
       - name: Send Final Summary
         if: always()
